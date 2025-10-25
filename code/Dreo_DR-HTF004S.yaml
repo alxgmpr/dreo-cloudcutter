@@ -502,7 +502,7 @@ switch:
     turn_on_action:
       - lambda: |-
           // Turn on and restore fan mode from memory before it was turned OFF
-          id(fan_mode).publish_state(to_string(id(fan_mode_memory_global)).c_str());
+          id(fan_mode).publish_state(id(fan_mode_memory_global).c_str());
     turn_off_action:
       - lambda: |-
           id(fan_mode).publish_state("OFF");
