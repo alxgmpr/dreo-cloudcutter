@@ -1,5 +1,7 @@
 # DREOtf07 — CMS80F7518 + WZ07-W (BL2028N)
 
+FCC ID: [2BPBC-HTF009](https://fcc.report/FCC-ID/2BPBC-HTF009)
+
 Findings for a Dreo tower fan using a **different MCU and UART protocol** than the DR-HTF004S documented in the main README.
 
 ## Key differences from DR-HTF004S
@@ -92,7 +94,7 @@ Additional metadata attributes (not DPs): `module_hardware_model`, `module_hardw
 
 Same BL2028N chip as the DR-HTF004S. Dump procedure identical to main README: `ltchiptool flash read` via RX1/TX1, reset via CEN.
 
-FCC ID: [2A3SYMBL01](https://fcc.report/FCC-ID/2A3SYMBL01)
+WiFi module FCC ID: [2A3SYMBL01](https://fcc.report/FCC-ID/2A3SYMBL01)
 
 ## MCU firmware update mechanism
 
