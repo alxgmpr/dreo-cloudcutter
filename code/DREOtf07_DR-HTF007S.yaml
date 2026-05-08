@@ -19,7 +19,7 @@ bk72xx:
 
 logger:
   level: DEBUG
-  baud_rate: 0
+  hardware_uart: UART2
 
 wifi:
   ssid: !secret wifi_ssid
