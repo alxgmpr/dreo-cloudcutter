@@ -98,14 +98,48 @@ WiFi module FCC ID: [2A3SYMBL01](https://fcc.report/FCC-ID/2A3SYMBL01)
 
 ## MCU firmware update mechanism
 
-The WiFi module acts as an OTA proxy for the MCU. The flow:
+The WiFi module acts as an OTA proxy for the MCU. MCU firmware has **never been published for OTA** through the Dreo cloud API — it is factory-only via CMS-ICE8 programmer. The WiFi module firmware (3.2.6) is available but the device shipped with a newer factory build (3.8.8).
 
-1. Cloud pushes OTA via AWS IoT shadow (`d_ota` attribute, `desired/sch` topic)
-2. WiFi module downloads firmware from cloud OTA server (TLS)
-3. WiFi module forwards firmware to MCU via Tuya UART commands `0x0E` (OTA start) / `0x0F` (OTA data)
-4. Events reported back: `ota_firmware_update`, `ota_error` with MCU error codes
+### OTA file format (OTAU)
 
-The download partition (`0x133000`–`0x1d2220`, ~636KB) contains a previous encrypted+compressed OTA image (RBL container at `0x131f9a`, version string `1018`). This is the WiFi module's own previous OTA — the MCU firmware would be downloaded and streamed directly to the MCU, not stored persistently on the WiFi flash.
+The `/mcu` HTTP endpoint validates uploads against this 128-byte header:
+
+| Offset | Size | Field |
+|--------|------|-------|
+| 0x00 | 4 | Magic: `OTAU` (0x4F544155) |
+| 0x04 | 4 | Product ID High (big-endian) |
+| 0x08 | 8 | Product ID Low (big-endian) |
+| 0x10 | 4 | Firmware Size (big-endian) |
+| 0x14 | 5 | Reserved |
+| 0x19 | 3 | Target Version (major.minor.patch) |
+| 0x1C | 1 | Reserved |
+| 0x1D | 3 | Min Upgrade Version (major.minor.patch) |
+| 0x20 | 16 | MD5 Hash |
+| 0x30 | 78 | Reserved/Padding |
+| 0x7E | 2 | CRC-16/MODBUS (poly 0xA001, init 0xFFFF) over bytes 0x00-0x7D |
+
+Validation order: length >= 128, magic == `OTAU`, CRC-16 check, product ID match, version check, min version check.
+
+### UART OTA transfer protocol (WiFi → MCU)
+
+After the WiFi module validates and stores the firmware, it forwards to the MCU via a modified Tuya protocol. The MCU drives the transfer (pull model).
+
+UART frame format:
+```
+55 AA 00 <seq> <cmd> 00 <len_hi> <len_lo> <data...> <checksum>
+```
+
+| Cmd | Direction | Purpose | Payload |
+|-----|-----------|---------|---------|
+| 0x0A | WiFi→MCU | OTA Start | 4 bytes: firmware size (big-endian) |
+| 0x0B | MCU→WiFi / WiFi→MCU | OTA Data request/response | Fixed 128-byte chunks |
+| 0x0C | WiFi→MCU | OTA End | 0 bytes |
+| 0x0F | WiFi→MCU | OTA Result | 1 byte: 0x02=success, 0x03=fail |
+| 0x14 | Both | OTA Notify (subcommand) | Variable, CRC-8 protected (poly 0x07) |
+
+Chunk size is fixed at **128 bytes (0x80)**. The MCU requests each chunk (cmd 0x0B), WiFi reads from flash and responds. Transfer runs in a dedicated RTOS task (`urgent_task`, priority 8).
+
+The download partition (`0x133000`–`0x1d2220`, ~636KB) contains a previous encrypted WiFi module OTA image (RBL container). MCU firmware is streamed directly and not stored persistently on WiFi flash.
 
 ### Web server endpoints (differs from DR-HTF004S)
 
@@ -130,22 +164,61 @@ partition_info_write → partition_info_read → (complete)
 
 Error reporting: `{"type":"ota_error","value":"mcu|%d|%d|%d|%d"}`
 
-### Cloud OTA parameters
+## Dreo cloud API
 
+### Authentication
+
+The API at `https://app-api-us.dreo-tech.com` requires these **mandatory headers** (missing any causes 403 from AWS WAF):
+
+| Header | Value |
+|--------|-------|
+| `ua` | `dreo/3.5.6` (custom header, NOT User-Agent) |
+| `lang` | `en` |
+| `content-type` | `application/json; charset=UTF-8` |
+| `user-agent` | `okhttp/4.9.1` |
+| `authorization` | `Bearer {access_token}` (after login) |
+
+Every request must include `?timestamp={ms}` as a query parameter.
+
+Login: `POST /api/oauth/login` with body:
+```json
+{
+  "client_id": "7de37c362ee54dcf9c4561812309347a",
+  "client_secret": "32dfa0764f25451d99f94e1693498791",
+  "grant_type": "email-password",
+  "email": "...",
+  "password": "<MD5 hash>",
+  "encrypt": "ciphertext",
+  "himei": "faede31549d649f58864093158787ec9",
+  "scope": "all",
+  "acceptLanguage": "en"
+}
 ```
-firmware_url           ← download URL (from cloud shadow)
-silent                 ← silent update flag  
-check_model            ← model verification before flash
-upgrade_only           ← upgrade-only flag (no downgrades?)
-mcuFirmwareVersion     ← reported to cloud
-mcuHardwareModel       ← reported to cloud
-moduleFirmwareVersion  ← reported to cloud
-moduleHardwareModel    ← reported to cloud
-```
 
-## Cloud OTA firmware download flow
+iOS app uses different client_id/secret (`d8a56a73d93b427cad801116dc4d3188`/`2ac9b179f7e84be58bb901d6ed8bf374`) and sign key `1d1d6a8c13bd80f`.
 
-The WiFi module receives OTA commands via AWS IoT shadow and downloads firmware from the Dreo cloud:
+### Device info
+
+- Model: **DR-HTF007S**
+- Product ID: `1453300621256003585`
+- Device SN: `1453300621256003585-e687f17eb2ef75aa:001:0000000000w`
+- Cloud reports: `module_hardware_model: "HeFi"`, `mcu_hardware_model: "CMS89F7518/USA"`
+
+### Firmware check endpoint
+
+`GET /api/upgrade/device/check` with query params: `moduleFirmwareVersion`, `firmwareType` (module/mcu), `mcuFirmwareVersion`, `moduleHardwareModel` (**must be `HeFi`**), `mcuHardwareModel`, `productId`, `devicesn`, `timestamp`.
+
+### Available firmware
+
+| Type | Version | URL | Notes |
+|------|---------|-----|-------|
+| module | 3.2.6 | `https://d13h33p641vwpi.cloudfront.net/data/upgrade/202410/18/002d3016a3f049ba938ce20c4a2638ba.rbl` | Encrypted RBL, 652KB. Cloud max version. |
+| module | 3.8.8 | Not available via OTA | Factory-only, on our device |
+| mcu | 3.0.6 | **Not available** | Never published for OTA. Factory-only via CMS-ICE8. |
+
+The cloud OTA only has module firmware up to 3.2.6. Our device shipped with 3.8.8 from the factory — a newer build never published for OTA. MCU firmware has never been staged for cloud OTA for this product.
+
+### Cloud OTA delivery flow
 
 ```
 1. Cloud publishes to:  %s/things/%s/shadow/update/delta
@@ -157,16 +230,13 @@ The WiFi module receives OTA commands via AWS IoT shadow and downloads firmware 
    - firmware_type     ("module" or "mcu")
    - firmware_version  (target version string)
    - firmware_url      (HTTPS download URL)
-   - silent            (silent update flag)
-   - check_model       (verify model before flash)
-   - upgrade_only      (prevent downgrades)
+   - silent, check_model, upgrade_only flags
 
 3. Module logs: "json_data:%s" then "URL:%s"
 4. Connects to OTA server via TLS, downloads firmware
 5. For module OTA: writes to download partition, reboots
-6. For MCU OTA: streams to CMS80F7518 via Tuya UART (cmd 0x0E/0x0F)
+6. For MCU OTA: streams to CMS80F7518 via UART (see transfer protocol above)
 7. Reports: {"event": [{"type":"ota_firmware_update","value":"%s_%s_%s"}]}
-   On error: {"type":"ota_error","value":"mcu|%d|%d|%d|%d"}
 ```
 
 Cloud endpoint: `https://iot.dreo-cloud.com/api/%s/health/mqtt-cluster/1.0.1.json`
