@@ -141,6 +141,79 @@ moduleFirmwareVersion  ← reported to cloud
 moduleHardwareModel    ← reported to cloud
 ```
 
+## Cloud OTA firmware download flow
+
+The WiFi module receives OTA commands via AWS IoT shadow and downloads firmware from the Dreo cloud:
+
+```
+1. Cloud publishes to:  %s/things/%s/shadow/update/delta
+   Also subscribes to:  %s/things/%s/shadow/update/accepted
+   Schedule topic:       data/%s/desired/schedule
+   Event topic:          event/%s/desired
+
+2. Shadow delta contains JSON with:
+   - firmware_type     ("module" or "mcu")
+   - firmware_version  (target version string)
+   - firmware_url      (HTTPS download URL)
+   - silent            (silent update flag)
+   - check_model       (verify model before flash)
+   - upgrade_only      (prevent downgrades)
+
+3. Module logs: "json_data:%s" then "URL:%s"
+4. Connects to OTA server via TLS, downloads firmware
+5. For module OTA: writes to download partition, reboots
+6. For MCU OTA: streams to CMS80F7518 via Tuya UART (cmd 0x0E/0x0F)
+7. Reports: {"event": [{"type":"ota_firmware_update","value":"%s_%s_%s"}]}
+   On error: {"type":"ota_error","value":"mcu|%d|%d|%d|%d"}
+```
+
+Cloud endpoint: `https://iot.dreo-cloud.com/api/%s/health/mqtt-cluster/1.0.1.json`
+
+### HTTP OTA handler (reversed from 0x067ab2)
+
+The webserver HTTP handler at function `0x067ab2` dispatches:
+
+```
+GET /module  → serves HTML form (title="SOC", version="3.8.8"), calls OTA handler
+GET /mcu     → calls sub_063554(), serves HTML form (title="MCU"), calls OTA handler
+GET /ota     → serves HTML form, calls OTA handler
+
+POST /module → sets ota_type="SOC", erases flash, streams upload to download partition
+POST /mcu    → sets ota_type="MCU", erases flash, streams upload, forwards to MCU
+POST /ota    → generic OTA handler
+
+404          → "The path which is requested is not found!"
+```
+
+The HTML form served is:
+```html
+<form method="POST" enctype="multipart/form-data">
+    <h3> %s OTA: %s</h3>
+    <input type="file" name="firmware">
+    <input type="submit" value="update">
+</form>
+```
+
+Where `%s` is "SOC"/"MCU" and the firmware version.
+
+## Debug UART log (TX2/RX2, 115200 8N1)
+
+Key identifiers from boot log:
+```
+BK7231n_1.0.8                            ← bootloader version
+SDK Rev: 3.0.46_20220921_d9dce354c70f    ← Beken SDK
+BLE Rev: B5-3.0.46-P0
+OSK Rev: F-3.0.28
+Date: Oct 10 2025 13:38:45               ← firmware build date
+firware ver:3.8.8                         ← application firmware version
+chip id=7231c device id=0x20521028
+ble_name: DREOtf07
+ble mac:00-1c-c2-83-5b-e2
+MAC address: 00:1c:c2:83:5b:e1
+license.sn:1453300621256003585-e687f17eb2ef75aa:001:0000000000w
+version:1-0-3                             ← HeFi protocol version
+```
+
 ## Firmware strings of interest
 
 ```
@@ -150,4 +223,6 @@ DREOtf07                                 ← BLE device name / model
 https://iot.dreo-cloud.com/api/%s/health/mqtt-cluster  ← cloud endpoint
 fan-device                               ← device class
 /module, /mcu, /ota                      ← HTTP OTA endpoints
+firware ver:3.8.8                        ← WiFi module firmware version
+Date: Oct 10 2025 13:38:45               ← build date
 ```
