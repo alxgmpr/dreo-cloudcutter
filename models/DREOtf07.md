@@ -94,12 +94,60 @@ Same BL2028N chip as the DR-HTF004S. Dump procedure identical to main README: `l
 
 FCC ID: [2A3SYMBL01](https://fcc.report/FCC-ID/2A3SYMBL01)
 
+## MCU firmware update mechanism
+
+The WiFi module acts as an OTA proxy for the MCU. The flow:
+
+1. Cloud pushes OTA via AWS IoT shadow (`d_ota` attribute, `desired/sch` topic)
+2. WiFi module downloads firmware from cloud OTA server (TLS)
+3. WiFi module forwards firmware to MCU via Tuya UART commands `0x0E` (OTA start) / `0x0F` (OTA data)
+4. Events reported back: `ota_firmware_update`, `ota_error` with MCU error codes
+
+The download partition (`0x133000`–`0x1d2220`, ~636KB) contains a previous encrypted+compressed OTA image (RBL container at `0x131f9a`, version string `1018`). This is the WiFi module's own previous OTA — the MCU firmware would be downloaded and streamed directly to the MCU, not stored persistently on the WiFi flash.
+
+### Web server endpoints (differs from DR-HTF004S)
+
+The DREOtf07 firmware has only three HTTP OTA paths (vs six+ on the DR-HTF004S):
+
+| Endpoint | Description |
+|----------|-------------|
+| `/module` | WiFi module OTA upload |
+| `/mcu` | MCU firmware OTA upload |
+| `/ota` | Generic OTA endpoint |
+
+Notably missing vs DR-HTF004S: `/wifilist`, `/appinfoset`, `/wifiinfoset`, `/devinfoget`, `/otaset`, `/otaLocalUp`, `/model.html`. This firmware uses the HeFi stack rather than the raw Beken webserver.
+
+The `/mcu` endpoint is significant — it may allow uploading CMS80F7518 firmware via HTTP, bypassing the need for the proprietary CMS-ICE8 programmer. This needs testing.
+
+### OTA state machine events
+
+```
+ota_start → ota_sslerr | transport → downend → file_size →
+partition_info_write → partition_info_read → (complete)
+```
+
+Error reporting: `{"type":"ota_error","value":"mcu|%d|%d|%d|%d"}`
+
+### Cloud OTA parameters
+
+```
+firmware_url           ← download URL (from cloud shadow)
+silent                 ← silent update flag  
+check_model            ← model verification before flash
+upgrade_only           ← upgrade-only flag (no downgrades?)
+mcuFirmwareVersion     ← reported to cloud
+mcuHardwareModel       ← reported to cloud
+moduleFirmwareVersion  ← reported to cloud
+moduleHardwareModel    ← reported to cloud
+```
+
 ## Firmware strings of interest
 
 ```
-dreo/hefi 1.0.3                          ← firmware stack identifier
+dreo/hefi 1.0.3                          ← firmware stack identifier (HeFi = HeSung Firmware?)
 DREOtf07                                 ← BLE device name / model
-007+CMS89F7518/USA+3.0.6                 ← MCU product info string
+007+CMS89F7518/USA+3.0.6                 ← MCU product info (Tuya cmd 0x01 response)
 https://iot.dreo-cloud.com/api/%s/health/mqtt-cluster  ← cloud endpoint
 fan-device                               ← device class
+/module, /mcu, /ota                      ← HTTP OTA endpoints
 ```
