@@ -19,7 +19,7 @@ bk72xx:
 
 logger:
   level: DEBUG
-  hardware_uart: UART2
+  baud_rate: 0
 
 wifi:
   ssid: !secret wifi_ssid
@@ -46,6 +46,11 @@ uart:
   tx_pin: TX1
   rx_pin: RX1
   baud_rate: 115200
+  debug:
+    direction: BOTH
+    after:
+      bytes: 64
+      timeout: 200ms
 
 tuya:
   time_id: homeassistant_time
@@ -55,7 +60,6 @@ time:
     id: homeassistant_time
 
 # --- Fan ---
-# DP 1 = power, DP 4 = speed (enum 1-4), DP 8 = oscillation
 fan:
   - platform: tuya
     name: "Fan"
@@ -65,7 +69,6 @@ fan:
     oscillation_datapoint: 8
 
 # --- Fan Mode ---
-# DP 3 = windtype (enum: 1=normal, 2=natural, 3=sleep, 4=auto)
 select:
   - platform: tuya
     name: "Fan Mode"
@@ -131,8 +134,6 @@ sensor:
     name: "Uptime"
     entity_category: diagnostic
 
-# --- Diagnostics ---
-# Unknown DPs — monitor these in HA logs to discover their function
   - platform: tuya
     name: "Unknown DP 9"
     sensor_datapoint: 9

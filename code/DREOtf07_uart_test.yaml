@@ -1,0 +1,104 @@
+# Test both 9600 (AA protocol like HTF004S) and 115200 (Tuya 55AA)
+# Try sending the HTF004S "Get Settings" command at 9600
+
+esphome:
+  name: dreo-dreotf07
+  friendly_name: "Dreo Tower Fan"
+  platformio_options:
+    board_build.bkcrypt_coeffs: "00000000000000000000000000000000"
+    board_build.bkota.key: "0123456789ABCDEF0123456789ABCDEF"
+    board_build.bkota.iv: "0123456789ABCDEF"
+    board_flash.calibration: "0x1E0000+0x1000"
+    board_flash.download: "0x132000+0xAE000"
+
+bk72xx:
+  board: generic-bk7231n-qfn32-tuya
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "DREOtf07 Fallback"
+    password: !secret fallback_ap_password
+  power_save_mode: none
+
+captive_portal:
+
+web_server:
+  port: 80
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+uart:
+  - id: mcu_uart
+    tx_pin: TX1
+    rx_pin: RX1
+    baud_rate: 115200
+    rx_buffer_size: 512
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        bytes: 128
+        timeout: 500ms
+      sequence:
+        - lambda: |-
+            UARTDebug::log_string(direction, bytes);
+            if (direction == uart::UART_DIRECTION_RX) {
+              std::string hex;
+              char buf[4];
+              for (uint8_t b : bytes) {
+                snprintf(buf, sizeof(buf), "%02X ", b);
+                hex += buf;
+              }
+              ESP_LOGI("mcu_rx", "RX %d bytes: %s", bytes.size(), hex.c_str());
+
+              // Check for ping request (HTF004S pattern: AA 1E FA ... 63)
+              if (bytes.size() >= 10 && bytes[0] == 0xAA && bytes[2] == 0xFA && bytes[9] == 0x63) {
+                ESP_LOGI("mcu_rx", "*** PING REQUEST - responding ***");
+                std::vector<uint8_t> response = {0xaa, 0x14, 0xfa, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe3};
+                id(mcu_uart).write_array(response.data(), response.size());
+              }
+              // Check for pre-ping (HTF004S pattern: AA 1E FA ... 61)
+              if (bytes.size() >= 10 && bytes[0] == 0xAA && bytes[2] == 0xFA && bytes[9] == 0x61) {
+                ESP_LOGI("mcu_rx", "*** PRE-PING REQUEST ***");
+              }
+              // Check for settings report
+              if (bytes.size() >= 10 && bytes[0] == 0xAA && bytes[2] == 0xFA && (bytes[9] == 0x03 || bytes[9] == 0x04)) {
+                ESP_LOGI("mcu_rx", "*** SETTINGS REPORT ***");
+              }
+            }
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          // Send 8-byte header heartbeat (HeFi extended format)
+          // 55 AA [ver=00] [seq=00] [cmd=00] [00] [len_hi=00] [len_lo=00] [chksum=FF]
+          uint8_t hb[] = {0x55, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF};
+          id(mcu_uart).write_array(hb, sizeof(hb));
+          ESP_LOGI("poll", "Sent 8-byte-header heartbeat");
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: uptime
+    name: "Uptime"
+    entity_category: diagnostic
+
+button:
+  - platform: restart
+    name: "Restart"
+    entity_category: diagnostic
