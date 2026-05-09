@@ -1,5 +1,5 @@
 esphome:
-  name: Dreo_DR-HTF004S
+  name: dreo-dr-htf004s
   platformio_options:
     #board_build.bkcrypt_coeffs: "123456782FAA55AA3AEE63DD4FEEAA00" does not really matter
     board_build.bkcrypt_coeffs: "00000000000000000000000000000000"
@@ -30,16 +30,9 @@ logger:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # Optional manual IP
-  manual_ip:
-    static_ip: <YOUR_IP_HERE>
-    gateway: <YOUR_GW_HERE>
-    subnet: 255.255.255.0
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Dreo Bl2028N Fallback Hotspot"
-    password: "<YOUR_FALLBACK_AP_PW_HERE>"
+    password: !secret fallback_ap_password
   power_save_mode: none # Use full power wifi all the time
 
 web_server:
@@ -48,11 +41,11 @@ web_server:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "<YOUR_ENCRYPTION_KEY_HERE>"
+    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-    password: "<YOUR_OTA_PW_HERE>"
+    password: !secret ota_password
 
 # Enable UART on the right PINs to communicate with 8051 MCU
 uart:
