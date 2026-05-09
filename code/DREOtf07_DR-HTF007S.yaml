@@ -114,13 +114,14 @@ uart:
 
               // --- Heartbeat response (cmd 0x00) ---
               if (cmd == 0x00) {
-                // This MCU always sends data=1 (never transitions to 0)
                 if (id(handshake_phase) < 3) {
                   if (id(handshake_phase) == 0)
                     ESP_LOGI("tuya", "First heartbeat, starting handshake");
                   id(handshake_phase) = 1;
                   uint8_t ws[] = {0x55, 0xAA, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, 0x04, 0x07};
                   id(mcu_uart).write_array(ws, 10);
+                } else {
+                  ESP_LOGD("tuya", "Heartbeat OK (phase=%d)", id(handshake_phase));
                 }
               }
 
@@ -186,7 +187,16 @@ uart:
                     case 6: id(timer_on).publish_state(val); break;
                     case 7: id(timer_off).publish_state(val); break;
                     case 8: id(fan_osc).publish_state(val != 0); break;
+                    case 9: {
+                      const char *f = "OK";
+                      if (val == 1) f = "E1";
+                      else if (val == 2) f = "EU";
+                      else if (val > 0) f = "Unknown";
+                      id(fan_fault).publish_state(f);
+                      break;
+                    }
                     case 11: id(temperature).publish_state(val); break;
+                    case 12: id(temp_unit).publish_state(val == 0 ? "°C" : "°F"); break;
                     default: ESP_LOGD("tuya", "Unknown DP%d type=%d val=%d", did, dty, val); break;
                   }
                   dp += 4 + dl;
@@ -209,31 +219,42 @@ uart:
 
               // --- Time sync request (cmd 0x0E) ---
               else if (cmd == 0x0E) {
-                ESP_LOGI("tuya", "Time sync request (len=%d)", dlen);
+                static uint32_t last_ts = 0;
+                uint32_t tnow = millis();
+                // Log full raw packet header + data (rate limited)
+                if (tnow - last_ts > 2000) {
+                  std::string pktdump;
+                  char hbuf[4];
+                  for (int i = pos; i < pkt_end && i < pos + 20; i++) {
+                    snprintf(hbuf, sizeof(hbuf), "%02X ", bytes[i]);
+                    pktdump += hbuf;
+                  }
+                  ESP_LOGI("tuya", "Time req raw: %s", pktdump.c_str());
+                }
                 auto now = id(ha_time).now();
-                if (now.is_valid()) {
-                  uint8_t tr[] = {0x55, 0xAA, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x07,
+                if (now.is_valid() && tnow - last_ts > 500) {
+                  last_ts = tnow;
+                  uint8_t dow = now.day_of_week;
+                  if (dow == 1) dow = 7; else dow -= 1;
+                  uint8_t tr[] = {0x55, 0xAA, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x08,
                     0x01, (uint8_t)(now.year % 100), (uint8_t)now.month, (uint8_t)now.day_of_month,
-                    (uint8_t)now.hour, (uint8_t)now.minute, (uint8_t)now.second, 0x00};
+                    (uint8_t)now.hour, (uint8_t)now.minute, (uint8_t)now.second, dow, 0x00};
                   uint8_t s = 0;
-                  for (int i = 0; i < 15; i++) s += tr[i];
-                  tr[15] = s;
-                  id(mcu_uart).write_array(tr, 16);
-                  ESP_LOGI("tuya", "Sent time: %04d-%02d-%02d %02d:%02d:%02d",
-                    now.year, now.month, now.day_of_month, now.hour, now.minute, now.second);
-                } else {
-                  uint8_t tr[] = {0x55, 0xAA, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x01, 0x00, 0x00};
-                  uint8_t s = 0;
-                  for (int i = 0; i < 9; i++) s += tr[i];
-                  tr[9] = s;
-                  id(mcu_uart).write_array(tr, 10);
-                  ESP_LOGW("tuya", "Sent time: unavailable");
+                  for (int i = 0; i < 16; i++) s += tr[i];
+                  tr[16] = s;
+                  id(mcu_uart).write_array(tr, 17);
+                  ESP_LOGI("tuya", "Sent time: %02d-%02d-%02d %02d:%02d:%02d dow=%d",
+                    now.year % 100, now.month, now.day_of_month, now.hour, now.minute, now.second, dow);
                 }
               }
 
               // --- WiFi reset request (cmd 0x04/0x05) ---
               else if (cmd == 0x04 || cmd == 0x05) {
-                ESP_LOGW("tuya", "WiFi reset requested (cmd 0x%02X)", cmd);
+                ESP_LOGW("tuya", "WiFi reset (cmd 0x%02X) — entering safe mode AP", cmd);
+                uint8_t ws[] = {0x55, 0xAA, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, 0x01, 0x00};
+                uint8_t s = 0; for (int i = 0; i < 9; i++) s += ws[i]; ws[9] = s;
+                id(mcu_uart).write_array(ws, 10);
+                App.safe_reboot();
               }
 
               else {
@@ -263,6 +284,17 @@ interval:
             uint8_t hb[] = {0x55, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF};
             id(mcu_uart).write_array(hb, 9);
             last_hb = now;
+          }
+
+          // Send WiFi status to MCU every 30s
+          static uint32_t last_ws = 0;
+          if (phase >= 3 && now - last_ws >= 30000) {
+            bool connected = wifi::global_wifi_component->is_connected();
+            uint8_t status = connected ? 0x04 : 0x02;
+            uint8_t ws[] = {0x55, 0xAA, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, status, 0x00};
+            uint8_t s = 0; for (int i = 0; i < 9; i++) s += ws[i]; ws[9] = s;
+            id(mcu_uart).write_array(ws, 10);
+            last_ws = now;
           }
 
           // Fallback DP query if ack-triggered one didn't fire
@@ -399,8 +431,8 @@ number:
     id: timer_on
     icon: "mdi:timer"
     min_value: 0
-    max_value: 1440
-    step: 1
+    max_value: 480
+    step: 60
     unit_of_measurement: "min"
     optimistic: true
     set_action:
@@ -412,8 +444,8 @@ number:
     id: timer_off
     icon: "mdi:timer-off"
     min_value: 0
-    max_value: 1440
-    step: 1
+    max_value: 480
+    step: 60
     unit_of_measurement: "min"
     optimistic: true
     set_action:
@@ -438,7 +470,30 @@ sensor:
     name: "Uptime"
     entity_category: diagnostic
 
+text_sensor:
+  - platform: template
+    name: "Fault"
+    id: fan_fault
+    icon: "mdi:alert-circle"
+    entity_category: diagnostic
+
+  - platform: template
+    name: "Temperature Unit"
+    id: temp_unit
+    icon: "mdi:thermometer"
+    entity_category: diagnostic
+
 button:
   - platform: restart
     name: "Restart"
     entity_category: diagnostic
+
+  - platform: template
+    name: "Query DPs"
+    entity_category: diagnostic
+    on_press:
+      - lambda: |-
+          uint8_t q[] = {0x55, 0xAA, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x07};
+          id(mcu_uart).write_array(q, 9);
+          ESP_LOGI("tuya", "Manual DP query sent");
+

@@ -60,27 +60,33 @@ Raw hex from power-on (MCU → WiFi):
 
 ## Datapoint map
 
-Extracted from firmware attribute table at flash offset `0x0ffbc0` and verified against live UART capture.
+Extracted from firmware CBOR attribute table at flash offset `0x0f0b12` and verified against live UART capture.
 
-| DP ID | Name | Tuya Type | Description |
-|-------|------|-----------|-------------|
-| 1 | poweron | Bool | Fan power on/off |
-| 2 | ledalwayson | Bool | LED always on |
-| 3 | windtype | Enum | Fan mode (normal/natural/sleep/auto) |
-| 4 | windlevel | Enum | Fan speed |
-| 5 | voiceon | Bool | Beeper on/off |
-| 6 | timeron | Value | Timer on duration |
-| 7 | timeroff | Value | Timer off duration |
-| 8 | shakehorizon | Bool | Horizontal oscillation on/off |
-| 9 | *(unknown)* | Enum | — |
-| 11 (0x0b) | temperature | Value | Ambient temperature (°F) |
-| 12 (0x0c) | *(unknown)* | Enum | — |
-| 18 (0x12) | tempunit | Int | Temperature unit |
-| 32 (0x20) | scheon | Enum | Schedule on |
-| 33 (0x21) | connected | Enum | Cloud connected status |
-| 34 (0x22) | mcuon | Enum | MCU on |
+| DP ID | Name | Tuya Type | R/W | Description |
+|-------|------|-----------|-----|-------------|
+| 1 | poweron | Bool (0x01) | rw | Fan power on/off |
+| 2 | ledalwayson | Bool (0x01) | rw | LED always on (display auto-off when false) |
+| 3 | windtype | Enum (0x04) | rw | Fan mode: 1=Normal, 2=Natural, 3=Sleep, 4=Auto |
+| 4 | windlevel | Enum (0x04) | rw | Fan speed: 1-4 (CMS80F7518), 1-8 (SC95F8613B) |
+| 5 | voiceon | Bool (0x01) | rw | Beeper on/off |
+| 6 | timeron | Value (0x02) | rw | Turn-on timer countdown in minutes (set when fan is off, 0-480) |
+| 7 | timeroff | Value (0x02) | rw | Turn-off timer countdown in minutes (set when fan is on, 0-480) |
+| 8 | shakehorizon | Bool (0x01) | rw | Horizontal oscillation on/off |
+| 9 | wrong | Enum (0x04) | ro | Fault indicator: 0=OK, 1=E1 (back cover), 2=EU (sensor failure) |
+| 11 (0x0b) | temperature | Value (0x02) | ro | Ambient temperature (°F when tempunit=1) |
+| 12 (0x0c) | tempunit | Enum (0x04) | ro | Temperature unit: 0=°C, 1=°F |
+| 18 (0x12) | scheon | Bool (0x01) | wo | Schedule execution trigger (sending 1 powers on the fan; not reported in DP status) |
 
-Additional metadata attributes (not DPs): `module_hardware_model`, `module_hardware_mac`, `mcu_hardware_model`, `mcu_firmware_version`, `wifi_rssi`, `wifi_ssid`, `network_latency`, `timeron.ts`, `timeroff.ts`, `d_ota`, `scheid`.
+Metadata attributes (negative CBOR `c` values, NOT Tuya DPs — handled internally by WiFi module):
+`connected`, `mcuon`, `module_hardware_model`, `module_hardware_mac`, `module_firmware_version`.
+
+### Status LEDs (known issue)
+
+The display panel has 4 status LEDs: WiFi, unknown, oscillate, schedule. The oscillate LED is controlled by DP8. The WiFi LED is driven by the MCU's internal handshake state counter (XDATA 0x0112) and cannot be controlled via WiFi status cmd 0x03 or any known DP. The stock firmware's cloud connection flow likely sets the counter to the right value through a sequence we haven't replicated. WiFi LED control is an open issue.
+
+### Timer button behavior
+
+The physical timer button cycles through 0→1→2→3→4→5→6→7→8→0 hours. Pressing sets DP6 (timeron) when the fan is OFF, or DP7 (timeroff) when ON. Values are in minutes (e.g., 3h = 180). The MCU requests time sync (cmd 0x0E) when the timer is activated. Timer counts down by 1 per minute.
 
 ## CMS80F7518 MCU
 
