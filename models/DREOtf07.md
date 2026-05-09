@@ -82,7 +82,7 @@ Metadata attributes (negative CBOR `c` values, NOT Tuya DPs — handled internal
 
 ### Status LEDs (known issue)
 
-The display panel has 4 status LEDs: WiFi, unknown, oscillate, schedule. The oscillate LED is controlled by DP8. The WiFi LED is driven by the MCU's internal handshake state counter (XDATA 0x0112) and cannot be controlled via WiFi status cmd 0x03 or any known DP. The stock firmware's cloud connection flow likely sets the counter to the right value through a sequence we haven't replicated. WiFi LED control is an open issue.
+The display panel has 4 status LEDs: WiFi, unknown, oscillate, schedule. The oscillate LED is controlled by DP8. The WiFi LED is driven by the MCU's internal handshake state counter (XDATA 0x0112, display buffer at 0x013D/0x013E) and cannot be controlled via WiFi status cmd 0x03, DPs 33/34, or any other known UART command. Tested all WiFi status values 0x00-0x04, DP33 (connected), and DP34 (mcuon) with no effect. The stock firmware's cloud connection flow likely sets the counter through a handshake sequence we haven't fully replicated. Controlling these LEDs may require flashing custom firmware to the CMS80F7518 MCU itself (proprietary CMS-ICE8 programmer required).
 
 ### Timer button behavior
 
