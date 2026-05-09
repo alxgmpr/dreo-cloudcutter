@@ -18,20 +18,19 @@ def heartbeat_loop(ser, stop_event):
         try:
             ser.write(make_pkt(seq, 0x00, b'\x01'))
             ser.read(1024)
-        except:
-            pass
+        except serial.SerialException:
+            break
         seq = (seq + 1) & 0xFF
         time.sleep(0.5)
 
 
 def main():
     if len(sys.argv) < 3:
-        print(f'Usage: {sys.argv[0]} <serial_port> <firmware.rbl> [--stock-test]')
+        print(f'Usage: {sys.argv[0]} <serial_port> <firmware.rbl>')
         sys.exit(1)
 
     port = sys.argv[1]
     firmware = sys.argv[2]
-    stock_test = '--stock-test' in sys.argv
 
     ser = serial.Serial(port, 115200, timeout=0.3)
     ser.reset_input_buffer()
