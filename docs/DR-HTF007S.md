@@ -2,22 +2,9 @@
 
 FCC ID: [2BPBC-HTF009](https://fcc.report/FCC-ID/2BPBC-HTF009)
 
-Findings for a Dreo tower fan using a **different MCU and UART protocol** than the DR-HTF004S documented in the main README.
+Detailed protocol documentation for the DR-HTF007S tower fan. See the [model comparison table](../README.md#supported-models) for differences from the DR-HTF004S.
 
-## Key differences from DR-HTF004S
-
-| | DR-HTF004S (main README) | DR-HTF007S (this doc) |
-|---|---|---|
-| MCU | SH79F9463P (SinoWealth 8051) | CMS80F7518 (CMS 8051, 48MHz, 32KB flash) |
-| WiFi module | PAI-053 / BL2028N | WZ07-W (MBL01) / BL2028N |
-| UART protocol | Custom `AA xx FA` framing | **Standard Tuya MCU protocol** (`55 AA`) |
-| Checksum | Custom (negative sum - 2×len) mod 256 | Tuya standard: sum of all bytes mod 256 |
-| Datapoints | Custom byte map (fixed offsets) | Tuya DP format (id/type/len/value TLVs) |
-| Firmware stack | Unknown | `dreo/hefi 1.0.3` |
-| Cloud | AWS IoT | AWS IoT via `iot.dreo-cloud.com` |
-| BLE name | Dreo... | DREOtf07 |
-
-The CMS80F7518 variant uses the standard Tuya MCU serial protocol, meaning existing TuyaMCU tooling (Tasmota TuyaMCU, ESPHome tuya component) may work directly without custom UART lambdas.
+The CMS80F7518 uses the standard Tuya MCU serial protocol, meaning existing TuyaMCU tooling (Tasmota TuyaMCU, ESPHome tuya component) can work directly without custom UART lambdas.
 
 ## UART protocol
 
