@@ -55,15 +55,21 @@ cp esphome/secrets.yaml.example esphome/secrets.yaml
 esphome compile esphome/DR-HTF007S.yaml
 ```
 
-The `.rbl` file will be at `.esphome/build/<name>/.pioenvs/<name>/image_bk7231n_app.ota.rbl`. It should start with `RBL` in a hex editor and contain no readable text (it's encrypted).
+The `.rbl` file will be at `esphome/.esphome/build/dreo-dr-htf007s/.pioenvs/dreo-dr-htf007s/image_bk7231n_app.ota.rbl`. It should start with `RBL` in a hex editor and contain no readable text (it's encrypted).
 
 ### Upload (DR-HTF007S)
 
+The DR-HTF007S has no HTML upload form — use `curl` or the included tool.
+
 1. Put the fan in pairing mode (factory reset or hold oscillation button)
 2. Connect to the Dreo AP (`192.168.0.1`)
-3. Upload the `.rbl` to `http://192.168.0.1/module`
+3. Upload:
 
-Or use the included upload tool which keeps the UART heartbeat alive during OTA:
+```bash
+curl -F 'firmware=@path/to/image_bk7231n_app.ota.rbl' http://192.168.0.1/module
+```
+
+Or use the included upload tool (requires UART connection) which keeps the MCU heartbeat alive during OTA:
 
 ```bash
 uv pip install -r tools/requirements.txt
