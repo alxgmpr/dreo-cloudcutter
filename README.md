@@ -1022,7 +1022,7 @@ This is where the story ends, we have all the pieces of the puzzle to implement 
 - The UART protocol
 - The checksum algorithm
 
-We can now put the [Dreo_DR-HTF004S.yaml](./code/Dreo_DR-HTF004S.yaml) file together and build the ESPHome images that will allow us to do the **initial OTA** via the `/model.html` Web page, and finally de-cloudify our fan 👏
+We can now put the [Dreo_DR-HTF004S.yaml](./esphome/Dreo_DR-HTF004S.yaml) file together and build the ESPHome images that will allow us to do the **initial OTA** via the `/model.html` Web page, and finally de-cloudify our fan 👏
 
 Since we're still connected to `RX2/TX2` we can see the OTA process taking place fully:
 
@@ -1173,7 +1173,7 @@ Onto sharing with others...
 - If you run HA, you should consider using the [ESPHome Add-on](https://esphome.io/guides/getting_started_hassio.html) doing it in HA with the add-on.
 
 ## Get the Dreo YAML file
-- Use the [Dreo_DR-HTF004S.yaml](/code/Dreo_DR-HTF004S.yaml) file to configure your own parameters:
+- Use the [Dreo_DR-HTF004S.yaml](/esphome/Dreo_DR-HTF004S.yaml) file to configure your own parameters:
     
     - [`wifi:`](https://esphome.io/components/wifi.html) block (including the `manual_ip:`, `ap:` block)
     - [`web_server:`](https://esphome.io/components/web_server.html) block
