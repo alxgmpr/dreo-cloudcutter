@@ -1,4 +1,4 @@
-# DREOtf07 — CMS80F7518 + WZ07-W (BL2028N)
+# DR-HTF007S — CMS80F7518 + WZ07-W (BL2028N)
 
 FCC ID: [2BPBC-HTF009](https://fcc.report/FCC-ID/2BPBC-HTF009)
 
@@ -6,7 +6,7 @@ Findings for a Dreo tower fan using a **different MCU and UART protocol** than t
 
 ## Key differences from DR-HTF004S
 
-| | DR-HTF004S (main README) | DREOtf07 (this doc) |
+| | DR-HTF004S (main README) | DR-HTF007S (this doc) |
 |---|---|---|
 | MCU | SH79F9463P (SinoWealth 8051) | CMS80F7518 (CMS 8051, 48MHz, 32KB flash) |
 | WiFi module | PAI-053 / BL2028N | WZ07-W (MBL01) / BL2028N |
@@ -149,7 +149,7 @@ The download partition (`0x133000`–`0x1d2220`, ~636KB) contains a previous enc
 
 ### Web server endpoints (differs from DR-HTF004S)
 
-The DREOtf07 firmware has only three HTTP OTA paths (vs six+ on the DR-HTF004S):
+The DR-HTF007S firmware has only three HTTP OTA paths (vs six+ on the DR-HTF004S):
 
 | Endpoint | Description |
 |----------|-------------|

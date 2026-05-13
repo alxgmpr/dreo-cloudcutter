@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HeFi UART control for Dreo DREOtf07 WiFi module (BK7231N).
+"""HeFi UART control for Dreo DR-HTF007S WiFi module (BK7231N).
 
 Sends commands over UART to the WiFi module, simulating the CMS80F7518 MCU.
 Protocol: 55 AA framing with 8-byte header (HeFi variant of Tuya MCU protocol).
@@ -242,7 +242,7 @@ def cmd_monitor(ser):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='HeFi UART control for Dreo DREOtf07')
+    parser = argparse.ArgumentParser(description='HeFi UART control for Dreo DR-HTF007S')
     parser.add_argument('port', help='Serial port (e.g. /dev/tty.usbserial-2120)')
     parser.add_argument('command', choices=['provision', 'reset', 'status', 'version', 'init', 'monitor'],
                         help='Command to execute')

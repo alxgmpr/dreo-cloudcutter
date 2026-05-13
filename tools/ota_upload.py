@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OTA upload for Dreo DREOtf07. Keeps UART heartbeat alive while uploading firmware."""
+"""OTA upload for Dreo DR-HTF007S. Keeps UART heartbeat alive while uploading firmware."""
 
 import serial
 import threading
